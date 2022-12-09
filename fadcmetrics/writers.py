@@ -74,15 +74,14 @@ class HttpWriter(BaseWriter):
         elif isinstance(data, dict):
             data = self.serialize(data=[data])
         with self.lock:
-            for entry in data:
-                try: 
-                    self.session.request(method=self.method, url=self.url, data=data)
-                except urllib3.exceptions.NewConnectionError as e:
-                    self.logger.error(msg=f"ERROR: Could not establish connection to {self.url}. {repr(e)}")
-                    raise HttpWriterException
-                except Exception as e:
-                    self.logger.error(msg=f"ERROR: Unhandled Exception. {repr(e)}")
-                    raise HttpWriterException
+            try: 
+                self.session.request(method=self.method, url=self.url, data=data)
+            except urllib3.exceptions.NewConnectionError as e:
+                self.logger.error(msg=f"ERROR: Could not establish connection to {self.url}. {repr(e)}")
+                raise HttpWriterException
+            except Exception as e:
+                self.logger.error(msg=f"ERROR: Unhandled Exception. {repr(e)}")
+                raise HttpWriterException
 
     @classmethod
     def from_config(cls, config: HttpWriterConfig):
