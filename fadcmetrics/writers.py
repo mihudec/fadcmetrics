@@ -17,6 +17,9 @@ class BaseWriter(object):
         try:
             # data['@timestamp'] = data['@timestamp'].isoformat()
             data['@timestamp'] = int(data['@timestamp'].timestamp())
+            if data.get('tags') is not None:
+                tags = data.pop('tags')
+                data.update(tags)
         except Exception as e:
             self.logger.error(msg=f"ERROR: Exception while preparing output for JSON. Data: {data}, Exception: {repr(e)}")
 
