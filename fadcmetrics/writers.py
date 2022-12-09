@@ -1,21 +1,41 @@
 import json
+from socket import MsgFlag
 from threading import Lock
+import urllib3
 import requests
-
+from fadcmetrics.utils.logging import get_logger
+from fadcmetrics.config import FileWriterConfig, HttpWriterConfig
+from fadcmetrics.exceptions import *
 class BaseWriter(object):
 
     def __init__(self, encoding='json'):
         self.lock = Lock()
         self.encoding = encoding
+        self.logger = get_logger(name=self.__class__.__name__)
 
-    def to_json(self, data: dict):
-        result = None
+    def prepare_json_output(self, data) -> dict:
         try:
             data['@timestamp'] = data['@timestamp'].isoformat()
-            result = json.dumps(data)
         except Exception as e:
-            pass
+            self.logger.error(msg=f"ERROR: Exception while preparing output for JSON. Data: {data}, Exception: {repr(e)}")
+
+        return data
+
+    def to_json(self, data, many: bool = False):
+        result = None
+        if isinstance(data, list):
+            result = [self.prepare_json_output(data=x) for x in data]
+        else:
+            result = self.prepare_json_output(data=data)
+        try:
+            result = json.dumps(result)
+        except Exception as e:
+            self.logger.error(msg=f"ERROR: Exception while serializing to JSON. Data: {data}, Exception: {repr(e)}")
         return result
+    
+    @classmethod
+    def from_config(config):
+        raise NotImplemented
 
     def serialize(self, data):
         if self.encoding == 'json':
@@ -34,8 +54,9 @@ class StdoutWriter(BaseWriter):
 
 class HttpWriter(BaseWriter):
 
-    def __init__(self, url: str, encoding='json'):
+    def __init__(self, url: str, method: str, encoding='json'):
         self.url = url
+        self.method = method
         self.session = self.get_session()
         super().__init__(encoding)
 
@@ -48,4 +69,21 @@ class HttpWriter(BaseWriter):
         return session
 
     def write(self, data):
-        pass
+        if isinstance(data, list):
+            data = self.serialize(data=data)
+        elif isinstance(data, dict):
+            data = self.serialize(data=[data])
+        with self.lock:
+            for entry in data:
+                try: 
+                    self.session.request(method=self.method, url=self.url, data=data)
+                except urllib3.exceptions.NewConnectionError as e:
+                    self.logger.error(msg=f"ERROR: Could not establish connection to {self.url}. {repr(e)}")
+                    raise HttpWriterException
+                except Exception as e:
+                    self.logger.error(msg=f"ERROR: Unhandled Exception. {repr(e)}")
+                    raise HttpWriterException
+
+    @classmethod
+    def from_config(cls, config: HttpWriterConfig):
+        return cls(url=config.url, method=config.method)

@@ -35,7 +35,7 @@ class FadcMetricsCli(object):
         self.run_scrapers()
 
     def run_scrapers(self):
-        scraper = FortiAdcMetricScraper()
+        scraper = FortiAdcMetricScraper(config=self.CONFIG)
         print(self.CONFIG.yaml())
         scraper.run(targets=self.CONFIG.targets)
             

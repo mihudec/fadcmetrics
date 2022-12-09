@@ -4,7 +4,7 @@ import json
 import yaml
 
 from argparse import Namespace
-from pydantic import BaseSettings, Field, validator, root_validator
+from pydantic import BaseSettings, Field, AnyHttpUrl, validator, root_validator
 from pydantic.typing import Any, Dict, List, Literal, Optional, Union
 from fadcmetrics.utils.logging import get_logger
 
@@ -62,9 +62,28 @@ class ConfigBase(BaseSettings):
             LOGGER.error(msg=f"Cannot determine config file format based on suffix, got {path.suffix=}")
         return config
 
+
+class WriterConfig(ConfigBase):
+
+    pass
+
+
+class FileWriterConfig(WriterConfig):
+
+    type: Literal['file']
+
+
+class HttpWriterConfig(WriterConfig):
+
+    type: Literal['http']
+    url: AnyHttpUrl
+    method: Literal['POST']
+
+
 class ScrapeConfig(ConfigBase):
     topic: Literal['vs_status', 'vs_http_stats']
     tags: Optional[Dict[str, str]]
+
 
 class TargetConfig(ConfigBase):
 
@@ -90,6 +109,7 @@ class TargetConfig(ConfigBase):
 class FadcMetricsConfig(ConfigBase):
 
     targets: List[TargetConfig]
+    writers: List[Union[FileWriterConfig, HttpWriterConfig]]
 
 def get_config(args: Union[Dict, Namespace] = Namespace()):
     global LOGGER

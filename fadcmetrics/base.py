@@ -1,17 +1,20 @@
+from distutils.command.config import config
 import time
 import datetime
 from threading import Thread, Lock, Event, current_thread
 from fadcclient.api import FortiAdcApiClient
-from fadcmetrics.config import TargetConfig
+from fadcmetrics.config import FadcMetricsConfig, TargetConfig, HttpWriterConfig
 from fadcmetrics.utils.logging import get_logger
-from fadcmetrics.writers import StdoutWriter
+from fadcmetrics.exceptions import *
+from fadcmetrics.writers import HttpWriter
 
 
 class FortiAdcMetricScraper():
 
-    def __init__(self) -> None:
+    def __init__(self, config: FadcMetricsConfig) -> None:
+        self.config = config
         self.logger = get_logger(name="FADC-Metrics", with_threads=True)
-        self.writer = StdoutWriter()
+        self.writers = self.get_writers()
         self.terminate = Event()
 
     def get_ts(self):
@@ -20,6 +23,23 @@ class FortiAdcMetricScraper():
     def get_client(self, conn_spec: dict):
         client = FortiAdcApiClient(**conn_spec)
         return client
+
+    def get_writers(self):
+        writers_map = {
+            "http": HttpWriter
+        }
+        writers = []
+        for writer_config in self.config.writers:
+            writer = writers_map[writer_config.type].from_config(config=writer_config)
+            writers.append(writer)
+        return writers
+
+    def write(self, data):
+        for writer in self.writers:
+            try:
+                writer.write(data=data)
+            except Exception as e:
+                self.terminate.set()
 
     def get_vs_list(self, client: FortiAdcApiClient):
         response = client.send_request(
@@ -103,7 +123,7 @@ class FortiAdcMetricScraper():
         self.logger.info(msg=f"Starting metrics scraping on {target.hostname} with scrape_interval={target.scrape_interval}")
         with self.get_client(conn_spec=conn_spec) as client:
             vs_names = self.get_vs_list(client=client)
-            print(vs_names)
+            self.logger.info(msg=f"Discovered VirtualServers: {','.join(vs_names)}")
             topics = [x.topic for x in target.scrape_configs]
             while True:
                 if self.terminate.is_set():
@@ -112,13 +132,11 @@ class FortiAdcMetricScraper():
                 if 'vs_status' in topics:
                     vs_status = self.get_vs_status(client=client, vs_names=vs_names)
                     self.enrich_metrics(metrics=vs_status, tags=target.tags)
-                    for entry in vs_status:
-                        self.writer.write(entry)
+                    self.write(data=vs_status)
                 if 'vs_http_stats' in topics:
                     vs_http = self.get_vs_http(client=client, vs_names=vs_names)
                     self.enrich_metrics(metrics=vs_http, tags=target.tags)
-                    for entry in vs_http:
-                        self.writer.write(entry)
+                    self.write(data=vs_http)
                 time.sleep(target.scrape_interval)
 
 
@@ -132,7 +150,6 @@ class FortiAdcMetricScraper():
                     daemon=True,
                     kwargs={"target": target})
             )
-        print(threads)
         [t.start() for t in threads]
         # Wait while threads are alive
         while any([t.is_alive() for t in threads]):
