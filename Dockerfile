@@ -12,4 +12,4 @@ RUN git clone https://github.com/mihudec/fadcmetrics.git
 RUN pip3 install -e fadcclient/
 RUN pip3 install -e fadcmetrics/
 
-CMD ["fadcmetrics", "--config-file" "/config/fadcmetrics.yml"]
+CMD ["fadcmetrics", "--config", "/config/fadcmetrics.yml"]

@@ -15,7 +15,8 @@ class BaseWriter(object):
 
     def prepare_json_output(self, data) -> dict:
         try:
-            data['@timestamp'] = data['@timestamp'].isoformat()
+            # data['@timestamp'] = data['@timestamp'].isoformat()
+            data['@timestamp'] = int(data['@timestamp'].timestamp())
         except Exception as e:
             self.logger.error(msg=f"ERROR: Exception while preparing output for JSON. Data: {data}, Exception: {repr(e)}")
 
