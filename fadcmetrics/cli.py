@@ -1,3 +1,4 @@
+import sys
 import pathlib
 import argparse
 from fadcmetrics.config import FadcMetricsConfig, get_config
@@ -31,12 +32,16 @@ class FadcMetricsCli(object):
             type=to_path
         )
         args = parser.parse_args()
-        self.CONFIG = get_config(args=args)
+        try:
+            self.CONFIG = get_config(args=args)
+        except Exception as e:
+            self.logger.error(msg=f"Failed to validate config.")
+            sys.exit(1)
         self.run_scrapers()
 
     def run_scrapers(self):
         scraper = FortiAdcMetricScraper(config=self.CONFIG)
-        print(self.CONFIG.yaml())
+        # print(self.CONFIG.yaml())
         scraper.run(targets=self.CONFIG.targets)
             
 
