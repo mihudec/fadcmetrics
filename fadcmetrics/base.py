@@ -119,10 +119,10 @@ class FortiAdcMetricScraper():
             writers.append(writer)
         return writers
 
-    def write(self, data):
+    def write(self, data, measurement: str = ""):
         for writer in self.writers:
             try:
-                writer.write(data=data)
+                writer.write(data=data, measurement=measurement)
             except Exception as e:
                 self.terminate.set()
 
