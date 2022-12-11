@@ -153,11 +153,11 @@ class FortiAdcMetricScraper():
                     self.logger.info(msg=f"Terminate Event is SET. Terminate Thread {current_thread().name}")
                     return
                 if 'vs_status' in topics:
-                    vs_status = fortiview.get_vs_status(client=client, vs_names=vs_names)
+                    vs_status = fortiview.get_vs_status(vs_names=vs_names)
                     self.enrich_metrics(metrics=vs_status, tags=target.tags)
                     self.write(data=vs_status)
                 if 'vs_http_stats' in topics:
-                    vs_http = fortiview.get_vs_http(client=client, vs_names=vs_names)
+                    vs_http = fortiview.get_vs_http(vs_names=vs_names)
                     self.enrich_metrics(metrics=vs_http, tags=target.tags)
                     self.write(data=vs_http)
                 time.sleep(target.scrape_interval)
