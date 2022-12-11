@@ -17,9 +17,9 @@ class BaseWriter(object):
         try:
             # data['@timestamp'] = data['@timestamp'].isoformat()
             data['@timestamp'] = int(data['@timestamp'].timestamp())
-            if data.get('tags') is not None:
-                tags = data.pop('tags')
-                data.update(tags)
+            # if data.get('tags') is not None:
+            #     tags = data.pop('tags')
+            #     data.update(tags)
         except Exception as e:
             self.logger.error(msg=f"ERROR: Exception while preparing output for JSON. Data: {data}, Exception: {repr(e)}")
 
@@ -72,11 +72,15 @@ class HttpWriter(BaseWriter):
         session.headers.update(headers)
         return session
 
-    def write(self, data):
+    def write(self, data, measurement: str = ""):
         if isinstance(data, list):
             data = self.serialize(data=data)
         elif isinstance(data, dict):
             data = self.serialize(data=[data])
+        data = {
+            "data": data,
+            "measurement": measurement
+        }
         with self.lock:
             try: 
                 self.session.request(method=self.method, url=self.url, data=data)

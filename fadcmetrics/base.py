@@ -155,11 +155,11 @@ class FortiAdcMetricScraper():
                 if 'vs_status' in topics:
                     vs_status = fortiview.get_vs_status(vs_names=vs_names)
                     self.enrich_metrics(metrics=vs_status, tags=target.tags)
-                    self.write(data=vs_status)
+                    self.write(data=vs_status, measurement="virtualServerStatus")
                 if 'vs_http_stats' in topics:
                     vs_http = fortiview.get_vs_http(vs_names=vs_names)
                     self.enrich_metrics(metrics=vs_http, tags=target.tags)
-                    self.write(data=vs_http)
+                    self.write(data=vs_http, measurement="virtualServerHttpStats")
                 time.sleep(target.scrape_interval)
 
     def run(self, targets):
