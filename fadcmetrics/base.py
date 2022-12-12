@@ -82,7 +82,7 @@ class FadcFortiView():
                 path='/api/fortiview/get_vs_http',
                 params={
                     "vdom": "root",
-                    "vsname": vs_name
+                    "vs": vs_name
                 }
             )
             is_error, error, data = self.client.handle_response(response=response)
