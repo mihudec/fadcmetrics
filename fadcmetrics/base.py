@@ -1,6 +1,7 @@
 import sys
 import time
 import datetime
+from typing import Dict, List, Pattern
 from threading import Thread, Lock, Event, current_thread
 from fadcclient.api import FortiAdcApiClient
 from fadcmetrics.config import FadcMetricsConfig, TargetConfig
@@ -34,11 +35,21 @@ class FadcFortiView():
                 vs_names =  data
             else:
                 self.logger.error(msg=f"Received unexpected data while getting VS Names. {data=}")
+        self.logger.info(f"Discovered VS Names: {vs_names}")
         return vs_names
 
-    def get_vs_status(self, vs_names: list):
-        results = {x: None for x in vs_names}
-        for vs_name in vs_names:
+    def filter_vs_names(self, patterns: List[Pattern]) -> List[str]:
+        vs_names = []
+        for vs_name in self.vs_names:
+            if any([pattern.match(string=vs_name) for pattern in patterns]):
+                vs_names.append(vs_name)
+        self.logger.info(f"Filtered VS Names: {vs_names}")
+        self.vs_names = vs_names
+
+
+    def get_vs_status(self):
+        results = {x: None for x in self.vs_names}
+        for vs_name in self.vs_names:
             response = self.client.send_request(
                 method="GET",
                 path='/api/status_history/vs_status',
@@ -63,9 +74,9 @@ class FadcFortiView():
             results_list.append(entry)
         return results_list
 
-    def get_vs_http(self, vs_names: list):
-        results = {x: None for x in vs_names}
-        for vs_name in vs_names:
+    def get_vs_http(self):
+        results = {x: None for x in self.vs_names}
+        for vs_name in self.vs_names:
             response = self.client.send_request(
                 method="GET",
                 path='/api/fortiview/get_vs_http',
@@ -141,21 +152,24 @@ class FortiAdcMetricScraper():
             fortiview = FadcFortiView(client=client)
             # Get VirtualServers names
             vs_names = []
+            if target.virtual_servers is not None:
+                fortiview.filter_vs_names(patterns=target.virtual_servers)
             vs_names = fortiview.vs_names
+
             if len(vs_names) == 0:
                 self.logger.error(msg="Failed to obtain VirtualServers Names.")
                 self.terminate.set()
                 self.failed.set()
             else:
-                self.logger.info(msg=f"Discovered VirtualServers: {','.join(vs_names)}")
+                self.logger.info(msg=f"Starting to collect VirtualServers: {','.join(vs_names)}")
             topics = [x.topic for x in target.scrape_configs]
             while True:
                 if 'vs_status' in topics:
-                    vs_status = fortiview.get_vs_status(vs_names=vs_names)
+                    vs_status = fortiview.get_vs_status()
                     self.enrich_metrics(metrics=vs_status, tags=target.tags)
                     self.write(data=vs_status, measurement="virtualServerStatus")
                 if 'vs_http_stats' in topics:
-                    vs_http = fortiview.get_vs_http(vs_names=vs_names)
+                    vs_http = fortiview.get_vs_http()
                     self.enrich_metrics(metrics=vs_http, tags=target.tags)
                     self.write(data=vs_http, measurement="virtualServerHttpStats")
                 # Number of seconds to sleep in each round

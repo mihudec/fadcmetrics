@@ -25,14 +25,29 @@ class BaseWriter(object):
 
         return data
 
-    def to_json(self, data, many: bool = False):
-        result = None
-        if isinstance(data, list):
-            result = [self.prepare_json_output(data=x) for x in data]
-        else:
-            result = self.prepare_json_output(data=data)
+    def prepare_metrics_data(self, metric: dict) -> dict:
         try:
-            result = json.dumps(result)
+            # data['@timestamp'] = data['@timestamp'].isoformat()
+            metric['@timestamp'] = int(metric['@timestamp'].timestamp())
+            # if data.get('tags') is not None:
+            #     tags = data.pop('tags')
+            #     data.update(tags)
+        except Exception as e:
+            self.logger.error(msg=f"ERROR: Exception while preparing metric. Data: {metric}, Exception: {repr(e)}")
+
+        return metric
+
+    def to_json(self, data):
+        result = None
+        try:
+            if isinstance(data, dict):
+                metrics = data.get('metrics')
+                if isinstance(metrics, list):
+                    metrics = [self.prepare_metrics_data(metric=x) for x in metrics]
+                    data['metrics'] = metrics
+                result = json.dumps(data)
+            else:
+                raise ValueError(f"Unexpected data format: {data}")
         except Exception as e:
             self.logger.error(msg=f"ERROR: Exception while serializing to JSON. Data: {data}, Exception: {repr(e)}")
         return result
@@ -73,15 +88,19 @@ class HttpWriter(BaseWriter):
         return session
 
     def write(self, data, measurement: str = ""):
-        if isinstance(data, list):
-            data = self.serialize(data=data)
-        elif isinstance(data, dict):
-            data = self.serialize(data=[data])
+        # if isinstance(data, list):
+        #     data = self.serialize(data=data)
+        # elif isinstance(data, dict):
+        #     data = self.serialize(data=[data])
+        
         data = {
-            "data": data,
+            "metrics": data,
             "measurement": measurement
         }
-        print(data)
+        data = self.serialize(data=data)
+        # print(data)
+        if not isinstance(data, str):
+            raise ValueError(f"Error while writing data. Expected JSON str, got {type(data)}")
         with self.lock:
             try: 
                 self.session.request(method=self.method, url=self.url, data=data)

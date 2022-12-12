@@ -2,9 +2,11 @@ import sys
 import pathlib
 import json
 import yaml
+import re
 
 from argparse import Namespace
 from pydantic import BaseSettings, Field, AnyHttpUrl, validator, root_validator
+from typing import Pattern
 from pydantic.typing import Any, Dict, List, Literal, Optional, Union
 from fadcmetrics.utils.logging import get_logger
 
@@ -99,7 +101,16 @@ class TargetConfig(ConfigBase):
     verify_ssl: bool = True
     scrape_interval: int
     scrape_configs: List[ScrapeConfig]
+    virtual_servers: Optional[List[Pattern]]
     tags: Optional[Dict[str, str]]
+
+    @validator('virtual_servers', pre=True)
+    def compile_virtual_server_regexes(cls, field):
+        if isinstance(field, list):
+            print(field)
+            field = [re.compile(pattern=x) for x in field]
+        print(field)
+        return field
 
     @root_validator(pre=False)
     def use_hostname_as_tag(cls, values):
