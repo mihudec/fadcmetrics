@@ -18,7 +18,7 @@ class FadcFortiView():
         self.vs_names = self.get_vs_names()
 
     def get_ts(self):
-        return datetime.datetime.utcnow()
+        return datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
 
     def get_vs_names(self, vdom: str = 'root'):
         vs_names = []
@@ -114,7 +114,7 @@ class FortiAdcMetricScraper():
         self.failed = Event()
 
     def get_ts(self):
-        return datetime.datetime.utcnow()
+        return datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
 
     def get_client(self, conn_spec: dict):
         client = FortiAdcApiClient(**conn_spec)
