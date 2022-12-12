@@ -73,6 +73,11 @@ class FileWriterConfig(WriterConfig):
     type: Literal['file']
 
 
+class StdoutWriterConfig(WriterConfig):
+
+    type: Literal['stdout']
+
+
 class HttpWriterConfig(WriterConfig):
 
     type: Literal['http']

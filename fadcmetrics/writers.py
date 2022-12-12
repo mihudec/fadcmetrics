@@ -50,7 +50,7 @@ class BaseWriter(object):
 
 class StdoutWriter(BaseWriter):
 
-    def write(self, data: dict):
+    def write(self, data: dict, measurement: str = ""):
         serial_data = self.serialize(data=data)
         if serial_data is not None:
             with self.lock:
@@ -81,6 +81,7 @@ class HttpWriter(BaseWriter):
             "data": data,
             "measurement": measurement
         }
+        print(data)
         with self.lock:
             try: 
                 self.session.request(method=self.method, url=self.url, data=data)

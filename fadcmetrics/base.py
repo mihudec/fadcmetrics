@@ -3,10 +3,10 @@ import time
 import datetime
 from threading import Thread, Lock, Event, current_thread
 from fadcclient.api import FortiAdcApiClient
-from fadcmetrics.config import FadcMetricsConfig, TargetConfig, HttpWriterConfig
+from fadcmetrics.config import FadcMetricsConfig, TargetConfig
 from fadcmetrics.utils.logging import get_logger
 from fadcmetrics.exceptions import *
-from fadcmetrics.writers import HttpWriter
+from fadcmetrics.writers import HttpWriter, StdoutWriter
 
 
 class FadcFortiView():
@@ -111,7 +111,8 @@ class FortiAdcMetricScraper():
 
     def get_writers(self):
         writers_map = {
-            "http": HttpWriter
+            "http": HttpWriter,
+            'stdout': StdoutWriter
         }
         writers = []
         for writer_config in self.config.writers:
@@ -149,9 +150,6 @@ class FortiAdcMetricScraper():
                 self.logger.info(msg=f"Discovered VirtualServers: {','.join(vs_names)}")
             topics = [x.topic for x in target.scrape_configs]
             while True:
-                if self.terminate.is_set():
-                    self.logger.info(msg=f"Terminate Event is SET. Terminate Thread {current_thread().name}")
-                    return
                 if 'vs_status' in topics:
                     vs_status = fortiview.get_vs_status(vs_names=vs_names)
                     self.enrich_metrics(metrics=vs_status, tags=target.tags)
@@ -160,7 +158,16 @@ class FortiAdcMetricScraper():
                     vs_http = fortiview.get_vs_http(vs_names=vs_names)
                     self.enrich_metrics(metrics=vs_http, tags=target.tags)
                     self.write(data=vs_http, measurement="virtualServerHttpStats")
-                time.sleep(target.scrape_interval)
+                # Number of seconds to sleep in each round
+                sleep_interval = 1
+                # Number of rounds
+                sleep_count = 0
+                while (sleep_interval * sleep_count) < target.scrape_interval:
+                    if self.terminate.is_set():
+                        self.logger.info(msg=f"Terminate Event is SET. Terminate Thread {current_thread().name}")
+                        return
+                    sleep_count += 1
+                    time.sleep(sleep_interval)
 
     def run(self, targets):
         threads = []
