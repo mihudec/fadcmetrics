@@ -16,6 +16,7 @@ class FadcFortiView():
         self.client = client
         self.logger = get_logger(name="FADC-FortiView", with_threads=True)
         self.vs_names = self.get_vs_names()
+        self.vs_tree = self.get_vs_tree()
 
     def get_ts(self):
         return datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
@@ -37,6 +38,94 @@ class FadcFortiView():
                 self.logger.error(msg=f"Received unexpected data while getting VS Names. {data=}")
         self.logger.info(f"Discovered VS Names: {vs_names}")
         return vs_names
+    
+    def get_vs_tree(self, vdom: str = 'root'):
+        tree = []
+        response = self.client.send_request(
+            method="GET",
+            path='/api/load_balance_virtual_server/get_trees',
+            params={
+                "vdom": vdom
+            }
+        )
+        is_error, error, data = self.client.handle_response(response=response)
+        if not is_error:
+            if isinstance(data, list):
+                pass
+            else:
+                self.logger.error(msg=f"Received unexpected data while getting VS Trees. {data=}")
+
+        def parse_pool(pool_data: dict):
+            pool_object = {
+                "name": pool_data.get('mkey'),
+                "object_type": "realServerPool",
+                "children": []
+            }
+            for rs_data in pool_data.get('children'):
+                rs_object = {
+                    "name": rs_data.get('real_server_id'),
+                    "object_type": "realServer",
+                    "address": rs_data.get('address'),
+                    "port": rs_data.get('port'),
+                }
+                pool_object["children"].append(rs_object)
+            return pool_object
+
+        for vs_data in data:
+            cr_enabled = True if vs_data.get('content-routing') == 'enable' else False
+            
+            vs_object = {
+                "name": vs_data.get('mkey'),
+                "object_type": "virtualServer",
+                "children": []
+            }
+
+            if cr_enabled:
+                for cr_data in vs_data.get('children'):
+                    cr_object = {
+                        "name": cr_data.get('mkey'),
+                        "object_type": "contentRouting",
+                        "children": []
+                    }
+                    for pool_data in cr_data.get('children'):
+                        pool_object = parse_pool(pool_data=pool_data)
+                        cr_object["children"].append(pool_object)
+
+                    vs_object["children"].append(cr_object)
+            else:
+                cr_object = {
+                    "name": "N/A",
+                    "object_type": "contentRouting",
+                    "children": []
+                }
+                for pool_data in vs_data.get('children'):
+                    pool_object = parse_pool(pool_data=pool_data)
+                    cr_object["children"].append(pool_object)
+                vs_object["children"].append(cr_object)
+            tree.append(vs_object)
+
+        return tree
+    
+    def flatten_tree(self, data, current=None, result=None):
+        if current is None:
+            current = {}
+        if result is None:
+            result = []
+
+        if 'name' in data:
+            current[data['object_type'] + 'Name'] = data['name']
+
+        if 'children' in data:
+            for child in data['children']:
+                self.flatten_tree(child, current, result)
+        else:
+            result.append(current.copy())
+
+        return result
+    
+    def get_vs_flat_tree(self, vs_name: str):
+        vs_tree = [x for x in self.vs_tree if x["name"] == vs_name][0]
+        return self.flatten_tree(data=vs_tree)
 
     def filter_vs_names(self, patterns: List[Pattern]) -> List[str]:
         vs_names = []
