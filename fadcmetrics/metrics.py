@@ -349,16 +349,3 @@ class FadcMetricsScraper:
     async def run(self):
         tasks = [self.worker(target) for target in self.config.targets]
         await asyncio.gather(*tasks)
-
-
-def main():
-    config = get_config()
-    metrics_scraper = FadcMetricsScraper(config=config, verbosity=config.verbosity)
-    try:
-        asyncio.run(metrics_scraper.run())
-    except KeyboardInterrupt as e:
-        print("Keyboard Interrupt - Exiting")
-        time.sleep(5)
-
-if __name__ == '__main__':
-    main()

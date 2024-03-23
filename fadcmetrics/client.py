@@ -149,11 +149,11 @@ class FadcRestClient(RestClient):
             cookie_jar = aiohttp.CookieJar(unsafe=True) # This is because aiohttp does not accept Cookies from IP addresses (such as https://127.0.0.1) by default
             session = aiohttp.ClientSession(headers=self.session_headers, connector=aiohttp.TCPConnector(ssl=self.verify_ssl), cookie_jar=cookie_jar)
             self._session = session
-            # auth_success = await self.authenticate()
-            # if auth_success:
-            #     self.logger.info(f"Authentication successful")
-            # else:
-            #     self.logger.error("Failed to authenticate.")
+            auth_success = await self.authenticate()
+            if auth_success:
+                self.logger.info(f"Authentication successful")
+            else:
+                self.logger.error("Failed to authenticate.")
         except Exception as e:
             self.logger.error(f"Exception while initializig client: {repr(e)}")
             raise
