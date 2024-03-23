@@ -1,9 +1,12 @@
+import asyncio
 import sys
 import pathlib
 import argparse
+import time
+
 from fadcmetrics.utils.logging import get_logger
 from fadcmetrics.config import FadcMetricsConfig, get_config
-from fadcmetrics.base import FortiAdcMetricScraper
+from fadcmetrics.metrics import FadcMetricsScraper
 
 CWD = pathlib.Path.cwd()
 
@@ -42,11 +45,16 @@ class FadcMetricsCli(object):
         self.run_scrapers()
 
     def run_scrapers(self):
-        scraper = FortiAdcMetricScraper(config=self.CONFIG)
+        scraper = FadcMetricsScraper(config=self.CONFIG)
         print(self.CONFIG.yaml())
-        scraper.run(targets=self.CONFIG.targets)
+        try:
+            asyncio.run(scraper.run())
+        except KeyboardInterrupt as e:
+            print("Keyboard Interrupt - Exiting")
+            time.sleep(5)
             
 
         
 def main():
     FadcMetricsCli()
+

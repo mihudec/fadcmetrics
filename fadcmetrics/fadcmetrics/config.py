@@ -5,9 +5,9 @@ import yaml
 import re
 
 from argparse import Namespace
-from pydantic import BaseSettings, Field, AnyHttpUrl, validator, root_validator
+from pydantic import BaseModel, Field, AnyHttpUrl, validator, model_validator
 from typing import Pattern
-from pydantic.typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 from fadcmetrics.utils.logging import get_logger
 
 LOGGER = get_logger(name="FadcMetricsConfig")
@@ -16,7 +16,7 @@ LOGGER = get_logger(name="FadcMetricsConfig")
 DEFAULT_CONFIG_PATH = pathlib.Path.home().joinpath('.fadcmetrics.yml')
 
 
-class ConfigBase(BaseSettings):
+class ConfigBase(BaseModel):
 
     class Config:
         validate_assignment = True
@@ -88,8 +88,8 @@ class HttpWriterConfig(WriterConfig):
 
 
 class ScrapeConfig(ConfigBase):
-    topic: Literal['vs_status', 'vs_http_stats']
-    tags: Optional[Dict[str, str]]
+    topic: Literal['vs_status', 'vs_http_stats', 'rs_status']
+    tags: Optional[Dict[str, str]] = Field(default=None)
 
 
 class TargetConfig(ConfigBase):
@@ -101,18 +101,18 @@ class TargetConfig(ConfigBase):
     verify_ssl: bool = True
     scrape_interval: int
     scrape_configs: List[ScrapeConfig]
-    virtual_servers: Optional[List[Pattern]]
-    tags: Optional[Dict[str, str]]
+    virtual_servers: Optional[List[Pattern]] = Field(default=None)
+    tags: Optional[Dict[str, str]] = Field(default=None)
 
-    @validator('virtual_servers', pre=True)
-    def compile_virtual_server_regexes(cls, field):
-        if isinstance(field, list):
-            print(field)
-            field = [re.compile(pattern=x) for x in field]
-        print(field)
-        return field
+    # @validator('virtual_servers', pre=True)
+    # def compile_virtual_server_regexes(cls, field):
+    #     if isinstance(field, list):
+    #         print(field)
+    #         field = [re.compile(pattern=x) for x in field]
+    #     print(field)
+    #     return field
 
-    @root_validator(pre=False)
+    @model_validator(mode='before')
     def use_hostname_as_tag(cls, values):
         tags = values.get('tags')
         if tags is None:
@@ -125,7 +125,8 @@ class TargetConfig(ConfigBase):
 class FadcMetricsConfig(ConfigBase):
 
     targets: List[TargetConfig]
-    writers: List[Union[FileWriterConfig, HttpWriterConfig]]
+    writers: List[Union[FileWriterConfig, HttpWriterConfig, StdoutWriterConfig]]
+    log_level: Optional[int] = Field(default=4)
 
 def get_config(args: Union[Dict, Namespace] = Namespace()):
     global LOGGER
@@ -147,7 +148,7 @@ def get_config(args: Union[Dict, Namespace] = Namespace()):
         LOGGER.debug(msg=f"Settings file {config_file_path} does not exists, using defaults.")
         config = FadcMetricsConfig()
 
-    for field_name in FadcMetricsConfig.__fields__.keys():
+    for field_name in FadcMetricsConfig.model_fields.keys():
         value = getattr(args, field_name, None)
         if value is not None:
             setattr(config, field_name, value)

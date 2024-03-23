@@ -1,17 +1,23 @@
 import json
-from socket import MsgFlag
-from threading import Lock
-import urllib3
-import requests
+import asyncio
+import aiohttp
+
 from fadcmetrics.utils.logging import get_logger
 from fadcmetrics.config import FileWriterConfig, HttpWriterConfig
 from fadcmetrics.exceptions import *
+
+
 class BaseWriter(object):
 
     def __init__(self, encoding='json'):
-        self.lock = Lock()
         self.encoding = encoding
         self.logger = get_logger(name=self.__class__.__name__)
+
+    async def initialize(self):
+        pass
+
+    async def close(self):
+        pass
 
     def prepare_json_output(self, data) -> dict:
         try:
@@ -53,7 +59,7 @@ class BaseWriter(object):
         return result
     
     @classmethod
-    def from_config(config):
+    def from_config(cls, config):
         raise NotImplemented
 
     def serialize(self, data):
@@ -65,52 +71,60 @@ class BaseWriter(object):
 
 class StdoutWriter(BaseWriter):
 
-    def write(self, data: dict, measurement: str = ""):
+    async def write(self, data: dict, measurement: str = ""):
+        data = {
+            "metrics": data,
+            "measurement": measurement
+        }
         serial_data = self.serialize(data=data)
         if serial_data is not None:
-            with self.lock:
-                print(serial_data)
+            print(serial_data)
+
+    @classmethod
+    def from_config(cls, config):
+        return cls()
 
 class HttpWriter(BaseWriter):
 
     def __init__(self, url: str, method: str, encoding='json'):
-        self.url = url
+        self.url = str(url)
         self.method = method
-        self.session = self.get_session()
+        self.verify_ssl = False
+        self._session = None
         super().__init__(encoding)
 
-    def get_session(self):
-        session = requests.Session()
-        headers = {
-            "Content-Type": "application/json"
-        }
-        session.headers.update(headers)
-        return session
+    async def initialize(self):
+        session_headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Cache-Control": "no-cache"
+            }
+        cookie_jar = aiohttp.CookieJar(unsafe=True) # This is because aiohttp does not accept Cookies from IP addresses (such as https://127.0.0.1) by default
+        session = aiohttp.ClientSession(headers=session_headers, connector=aiohttp.TCPConnector(ssl=self.verify_ssl), cookie_jar=cookie_jar)
+        self._session = session
 
-    def write(self, data, measurement: str = ""):
-        # if isinstance(data, list):
-        #     data = self.serialize(data=data)
-        # elif isinstance(data, dict):
-        #     data = self.serialize(data=[data])
-        
+    async def close(self):
+        await self._session.close()
+
+
+    async def write(self, data, measurement: str = ""):
         data = {
             "metrics": data,
             "measurement": measurement
         }
         data = self.serialize(data=data)
-        # print(data)
+        
         if not isinstance(data, str):
             raise ValueError(f"Error while writing data. Expected JSON str, got {type(data)}")
-        with self.lock:
-            try: 
-                self.session.request(method=self.method, url=self.url, data=data)
-            except urllib3.exceptions.NewConnectionError as e:
-                self.logger.error(msg=f"ERROR: Could not establish connection to {self.url}. {repr(e)}")
-                raise HttpWriterException
-            except Exception as e:
-                self.logger.error(msg=f"ERROR: Unhandled Exception. {repr(e)}")
-                raise HttpWriterException
+        try: 
+            if self.method.lower() == "post":
+                response = await self._session.post(url=self.url, data=data)
+        except Exception as e:
+            self.logger.error(msg=f"ERROR: Unhandled Exception. {repr(e)}")
+            raise HttpWriterException
 
     @classmethod
     def from_config(cls, config: HttpWriterConfig):
         return cls(url=config.url, method=config.method)
+
+

@@ -2,7 +2,7 @@ import logging
 import sys
 import pathlib
 
-LOG_PATH = pathlib.Path.home().joinpath(".fadcmetrics.log")
+LOG_PATH = pathlib.Path.home().joinpath(".fortine_api_client.log")
 
 def get_logger(name, verbosity=4, handle=["stderr"], with_threads=False):
     """
