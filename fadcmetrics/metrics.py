@@ -29,9 +29,11 @@ class FadcFortiView:
 
     HEALTH_STATUS_MAP = {
             "HEALTHY": 0,
-            "DISABLED": 1,
-            "UNHEALTHY": 2,
-            "DOWN": 3
+            "DISABLE": 1,
+            "MAINTAINED": 2,
+            "NO_HEALTH_CHECK": 3,
+            "UNHEALTHY": 4,
+            "DEAD": 5
     }
 
     def __init__(self, client: FadcRestClient, hostname: str = "UNSPECIFIED", verbosity: int = 4):
