@@ -162,6 +162,7 @@ class FadcFortiView:
         return nested_dict
     
     async def get_vs_status(self):
+        self.logger.debug("Getting VS Status")
         vs_names = self.get_vs_names()
         vs_health_statuses = {x["name"]: self.map_health_status(x["current_status"]) for x in self.tree_list}
         tag_sets = [{"virtualServerName": x} for x in vs_names]
@@ -181,6 +182,9 @@ class FadcFortiView:
         results_list = []
         timestamp = self.get_ts()
         for tag_set, response in zip(tag_sets, responses):
+            if response is None:
+                self.logger.warning(f"Got Empty Response for TagSet: {tag_set}")
+                continue
             entry = dict(response)
             entry.update({"health": vs_health_statuses.get(tag_set["virtualServerName"])})
             entry.update({"tags": tag_set})
@@ -189,6 +193,7 @@ class FadcFortiView:
         return results_list
 
     async def get_vs_http(self):
+        self.logger.debug("Getting VS HTTP Statistics")
         vs_names = self.get_vs_names()
         tag_sets = [{"virtualServerName": x} for x in vs_names]
         sorted(vs_names)
@@ -207,6 +212,9 @@ class FadcFortiView:
         results_list = []
         timestamp = self.get_ts()
         for tag_set, response in zip(tag_sets, responses):
+            if response is None:
+                self.logger.warning(f"Got Empty Response for TagSet: {tag_set}")
+                continue
             entry = {}
             for key in [f"category_{x}" for x in range(4)]:
                 entry.update(response[key])
@@ -216,6 +224,7 @@ class FadcFortiView:
         return results_list
     
     async def get_rs_status(self):
+        self.logger.debug("Getting RS Status")
         vs_names = self.get_vs_names()
         sorted(vs_names)
         tag_sets = []
@@ -253,6 +262,9 @@ class FadcFortiView:
         results_list = []
         timestamp = self.get_ts()
         for tag_set, response in zip(tag_sets, responses):
+            if response is None:
+                self.logger.warning(f"Got Empty Response for TagSet: {tag_set}")
+                continue
             entry = dict(response)
             entry.update({"health": self.map_health_status(rs_health_statuses[tag_set.get("realServerPoolName")][tag_set.get("realServerName")])})
             entry.update({"tags": tag_set})
@@ -265,10 +277,10 @@ class FadcMetricsScraper:
 
     
 
-    def __init__(self, config: FadcMetricsConfig, verbosity: int = 4) -> None:
+    def __init__(self, config: FadcMetricsConfig) -> None:
         self.config = config
         self.writers = None
-        self.verbosity = verbosity
+        self.verbosity = self.config.log_level
         self.logger = get_logger(name=self.__class__.__name__, verbosity=self.verbosity)
 
     async def get_writers(self):
@@ -313,12 +325,15 @@ class FadcMetricsScraper:
         while True:
             await self.get_writers()
             try:
-                async with FadcRestClient(base_url=target.base_url, username=target.username, password=target.password, verbosity=self.verbosity) as client:
+                async with FadcRestClient(base_url=target.base_url, username=target.username, password=target.password, max_sessions=target.max_sessions, verbosity=self.verbosity) as client:
                     await client.initialize()
                     fortiview = FadcFortiView(client=client, hostname=target.hostname, verbosity=self.verbosity)
                     # Loop for metrics scraping
+                    counter = 0
                     while True:
-                        await fortiview.get_vs_tree()
+                        if counter % 10 == 0:
+                            await fortiview.get_vs_tree()
+                            counter = 0
                         if "vs_http_stats" in topics:
                             vs_http_stats = await fortiview.get_vs_http()
                             self.enrich_metrics(metrics=vs_http_stats, tags=target.tags)
@@ -331,7 +346,7 @@ class FadcMetricsScraper:
                             rs_status = await fortiview.get_rs_status()
                             self.enrich_metrics(metrics=rs_status, tags=target.tags)
                             await self.write(data=rs_status, measurement="realServerStatus")
-
+                        counter += 1
                         await asyncio.sleep(target.scrape_interval)
             except asyncio.CancelledError as e:
                 self.logger.info("Scraper canceled.")

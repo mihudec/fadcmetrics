@@ -46,7 +46,7 @@ class FadcMetricsCli(object):
 
     def run_scrapers(self):
         scraper = FadcMetricsScraper(config=self.CONFIG)
-        print(self.CONFIG.yaml())
+        # print(self.CONFIG.yaml())
         try:
             asyncio.run(scraper.run())
         except KeyboardInterrupt as e:

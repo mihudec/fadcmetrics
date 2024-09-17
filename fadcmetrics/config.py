@@ -100,6 +100,7 @@ class TargetConfig(ConfigBase):
     password: str
     verify_ssl: bool = True
     scrape_interval: int
+    max_sessions: Optional[int] = Field(10)
     scrape_configs: List[ScrapeConfig]
     virtual_servers: Optional[List[Pattern]] = Field(default=None)
     tags: Optional[Dict[str, str]] = Field(default=None)

@@ -28,7 +28,7 @@ def timer(func):
     
 
 class RestClient:
-    def __init__(self, base_url: str, username: str, password: str, verify_ssl: bool = False, verbosity: int = 4) -> None:
+    def __init__(self, base_url: str, username: str, password: str, verify_ssl: bool = False, max_sessions: int = 10, verbosity: int = 4) -> None:
         self.base_url = base_url
         self.username = username
         self.password = password
@@ -37,7 +37,7 @@ class RestClient:
         self.logger = get_logger(name=self.__class__.__name__, verbosity=self.verbosity, with_threads=False)
         self.logger.info(msg="Initializing Fortinet REST API Client")
         self._session = None
-        self.semaphore = asyncio.Semaphore(1)
+        self.semaphore = asyncio.Semaphore(max_sessions)
 
 
     async def initialize(self):
@@ -65,18 +65,24 @@ class RestClient:
         return is_error, error, data
     
 
-    def retry(max_retries=1):
+    def retry(max_retries=5):
         def inner(func):
-            async def wrapper(self, *args, **kwargs):
+            async def retry_wrapper(self, *args, **kwargs):
                 retries = 0
                 while retries <= max_retries:
                     try:
                         status_code, response_data = await func(self, *args, **kwargs)
-                        if status_code != 401: 
-                            return status_code, response_data
-                        else:
+
+                        if status_code == 401: 
                             self.logger.info(f"Unauthorized - Retrying {retries}/{max_retries}")
                             await self.authenticate()
+                        elif response_data is None:
+                            self.logger.warning(f"EMPTY RESPONSE")
+                        elif response_data.get('payload') is None:
+                            self.logger.warning(f"EMPTY PAYLOAD - Retrying  {retries}/{max_retries}: Endpoint: {kwargs.get('endpoint')} Params: {kwargs.get('params')}")
+                            time.sleep(0.1 + 0.1*retries)
+                        else:
+                            return status_code, response_data
                     except AuthenticationFailed as e:
                         # if retries == max_retries:
                         raise
@@ -87,7 +93,7 @@ class RestClient:
                 return status_code, response_data
 
             async def async_wrapper(*args, **kwargs):
-                return await wrapper(*args, **kwargs)
+                return await retry_wrapper(*args, **kwargs)
 
             return async_wrapper
 
@@ -117,9 +123,13 @@ class RestClient:
     
     @timer
     async def bulk_get(self, requests):
-        tasks = []
-        for req in requests:
-            tasks.append(self.get(req["endpoint"], req.get("params")))
+                
+        async def limited_get(req):
+            async with self.semaphore:
+                return await self.get(req["endpoint"], req.get("params"))
+        
+        tasks = [limited_get(req) for req in requests]
+        
         responses = None
         responses = await asyncio.gather(*tasks)
         return responses
@@ -135,8 +145,8 @@ class RestClient:
 
 class FadcRestClient(RestClient):
 
-    def __init__(self, base_url: str, username: str, password: str, verify_ssl: bool = False, verbosity: int = 4) -> None:
-        super().__init__(base_url, username, password, verify_ssl, verbosity)
+    def __init__(self, base_url: str, username: str, password: str, verify_ssl: bool = False, max_sessions: int = 10, verbosity: int = 4) -> None:
+        super().__init__(base_url, username, password, verify_ssl, max_sessions, verbosity)
 
 
     async def initialize(self):
